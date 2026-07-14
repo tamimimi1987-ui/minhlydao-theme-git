@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.56.0' );
+define( 'MLD_VER', '2.89.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -27,7 +27,9 @@ add_action( 'after_setup_theme', 'mld_setup' );
  * 2. Nạp CSS / JS
  * ------------------------------------------------------------------ */
 function mld_assets() {
-	wp_enqueue_style( 'mld-fonts', 'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,600;0,700;1,400&display=swap', array(), null );
+	// Font chinh cua site la Arial (font he thong, khong can nap ngoai) -- chi con nap
+	// rieng Dancing Script (co ho tro dau tieng Viet) cho cac tieu de kieu thu phap.
+	wp_enqueue_style( 'mld-fonts', 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&display=swap', array(), null );
 	wp_enqueue_style( 'mld-style', get_stylesheet_uri(), array(), MLD_VER );
 	wp_enqueue_script( 'mld-main', get_template_directory_uri() . '/assets/main.js', array(), MLD_VER, true );
 	if ( is_page( 'lich-tam-tong-mieu' ) ) {
@@ -483,7 +485,29 @@ function mld_current_lang() {
 	return isset( $GLOBALS['mld_lang'] ) ? $GLOBALS['mld_lang'] : 'vi';
 }
 
-/** Chèn tiền tố ngôn ngữ vào một URL nội bộ của site (giữ nguyên phần còn lại) */
+/** Khi vao THANG url goc (khong tien to /en/ hay /fr/) cua mot bai da la ban dich
+ * (vi mld_localize_permalink() co tinh giu URL rieng, sach cho cac bai da dich),
+ * request nay khong co tien to nen mld_current_lang() mac dinh se tra ve 'vi',
+ * lam menu/link sinh ra tren trang do bi roi ve tieng Viet (dung bug nguoi dung
+ * bao: bam vao 1 bai tieng Anh xong menu lai tro ve tieng Viet).
+ * Fix: neu bai dang xem co meta _mld_lang, dung luon gia tri do lam ngon ngu hien tai. */
+function mld_detect_lang_from_singular() {
+	if ( is_admin() ) { return; }
+	if ( 'vi' !== mld_current_lang() ) { return; } // da co tien to ro rang tren URL -- khong ghi de.
+	if ( ! is_singular() ) { return; }
+	$post_id = get_queried_object_id();
+	if ( ! $post_id ) { return; }
+	$own_lang = get_post_meta( $post_id, '_mld_lang', true );
+	if ( in_array( $own_lang, array( 'en', 'fr' ), true ) ) {
+		$GLOBALS['mld_lang'] = $own_lang;
+	}
+}
+add_action( 'wp', 'mld_detect_lang_from_singular' );
+
+/** Chèn tiền tố ngôn ngữ vào một URL nội bộ của site (giữ nguyên phần còn lại).
+ * LUU Y: site dung permalink dang "index.php/...", nen tien to ngon ngu phai nam
+ * SAU "index.php/" (VD: /index.php/en/...), khong phai truoc no (VD sai: /en/index.php/...
+ * -- dang nay Apache tra 404 thang, khong toi duoc WordPress). */
 function mld_localize_url( $url, $lang = null ) {
 	if ( null === $lang ) { $lang = mld_current_lang(); }
 	if ( 'vi' === $lang ) { return $url; }
@@ -492,7 +516,14 @@ function mld_localize_url( $url, $lang = null ) {
 	if ( 0 !== strpos( $url, $home ) ) { return $url; }
 
 	$path = substr( $url, strlen( $home ) ); // phần sau domain, không có "/" đầu
-	$path = preg_replace( '#^(en|fr)/#', '', $path ); // gỡ tiền tố cũ nếu có
+	// Gỡ tiền tố ngôn ngữ cũ nếu có, dù nằm trước hay sau "index.php/".
+	$path = preg_replace( '#^index\.php/(en|fr)/#', 'index.php/', $path );
+	$path = preg_replace( '#^(en|fr)/#', '', $path );
+
+	if ( 0 === strpos( $path, 'index.php/' ) ) {
+		$rest = substr( $path, strlen( 'index.php/' ) );
+		return $home . 'index.php/' . $lang . '/' . $rest;
+	}
 	return $home . $lang . '/' . $path;
 }
 
@@ -526,6 +557,11 @@ function mld_swap_to_translation() {
 	// Trang WordPress Page (Giới thiệu, English/Français, Liên hệ...) đã có nội dung riêng theo từng ngôn ngữ sẵn — không áp dụng.
 	if ( 'page' === get_post_type( $post ) ) { return; }
 
+	// Dang xem THANG url rieng cua chinh bai dich (vi du vao tu archive, khong qua tien to /en/) --
+	// bai nay da dung ngon ngu roi, khong can (va khong duoc) swap/de trong noi dung cua chinh no.
+	$own_lang = get_post_meta( $post->ID, '_mld_lang', true );
+	if ( $own_lang === $lang ) { return; }
+
 	$translated = mld_get_translation( $post->ID, $lang );
 	if ( $translated && $translated->ID !== $post->ID ) {
 		$post = $translated;
@@ -546,15 +582,125 @@ function mld_swap_to_translation() {
 }
 add_action( 'template_redirect', 'mld_swap_to_translation' );
 
+/** Bản đồ slug trang WordPress Page (Giới thiệu, Hiến chương...) => URL trang tiếng Anh tương ứng đã dịch sẵn
+ * (nội dung này được dịch từ giai đoạn đầu dự án, nằm dưới /en/... — bản đồ này chỉ để nút chuyển ngôn ngữ
+ * trỏ đúng chỗ, không đụng tới nội dung của các trang đó). */
+function mld_page_translation_map() {
+	return array(
+		'gioi-thieu'         => array( 'en' => '/en/introduction/' ),
+		'thu-ngo'            => array( 'en' => '/en/welcome-letter/' ),
+		'gioi-thieu-chung'   => array( 'en' => '/en/general-introduction/' ),
+		'hien-chuong'        => array( 'en' => '/en/charter/' ),
+		'hien-chuong-phan-1' => array( 'en' => '/en/charter-part-1/' ),
+		'hien-chuong-phan-2' => array( 'en' => '/en/charter-part-2/' ),
+		'hien-chuong-phan-3' => array( 'en' => '/en/charter-part-3/' ),
+		'tho-phuong'         => array( 'en' => '/en/worship/' ),
+		'lich-su-thanh-lap'  => array( 'en' => '/en/history/' ),
+		'chinh-sach-website' => array( 'en' => '/en/website-usage-policy/' ),
+		'lien-he'            => array( 'en' => '/en/contact/' ),
+	);
+}
+
 /** URL để chuyển trang hiện tại sang ngôn ngữ $lang, cố gắng trỏ đúng bài/trang tương ứng thay vì luôn về trang chủ ngôn ngữ đó. */
 function mld_lang_switch_url( $lang ) {
 	if ( isset( $GLOBALS['mld_original_post_id'] ) ) {
+		$orig = get_post( $GLOBALS['mld_original_post_id'] );
+		if ( $orig && 'page' === $orig->post_type && 'vi' !== $lang ) {
+			$map = mld_page_translation_map();
+			if ( isset( $map[ $orig->post_name ][ $lang ] ) ) {
+				return home_url( $map[ $orig->post_name ][ $lang ] );
+			}
+		}
+		// Voi cac CPT (su_kien, kinh, sach, thanh_ngon, giao_ly, tu_tinh, tin_tuc...) -- neu da co
+		// bai dich lien ket qua _mld_lang_group thi tro thang toi URL that cua bai dich do,
+		// thay vi dung tien to /en/ chung chung (bai dich co slug rieng, khong giong bai goc).
+		if ( $orig && 'page' !== $orig->post_type && 'vi' !== $lang ) {
+			$translated = mld_get_translation( $orig->ID, $lang );
+			if ( $translated && $translated->ID !== $orig->ID ) {
+				return get_permalink( $translated );
+			}
+		}
 		$base = get_permalink( $GLOBALS['mld_original_post_id'] );
 		return 'vi' === $lang ? $base : mld_localize_url( $base, $lang );
 	}
 	if ( 'vi' === $lang ) { return home_url( '/' ); }
 	return mld_lang_page_url( $lang );
 }
+
+/** Chen tien to ngon ngu vao MOI permalink cua bai viet/CPT/taxonomy duoc sinh ra qua
+ * get_permalink()/the_permalink() (ke ca trong vong lap archive, bai lien quan...) -- de khi
+ * dang duyet web o che do EN/FR, bam "Xem chi tiet" hay bat ky link bai viet nao cung GIU
+ * NGUYEN ngon ngu dang xem, thay vi rot ve ban tieng Viet.
+ * Ngoai le: neu bai viet DA LA ban dich (co meta _mld_lang) thi giu nguyen URL that cua no,
+ * khong chen them tien to (URL do da dung va day du roi). */
+function mld_localize_permalink( $url, $post = null ) {
+	$lang = mld_current_lang();
+	if ( 'vi' === $lang ) { return $url; }
+	if ( $post instanceof WP_Post ) {
+		$post_lang = get_post_meta( $post->ID, '_mld_lang', true );
+		if ( $post_lang ) { return $url; }
+	}
+	return mld_localize_url( $url, $lang );
+}
+add_filter( 'post_link', 'mld_localize_permalink', 10, 2 );
+add_filter( 'post_type_link', 'mld_localize_permalink', 10, 2 );
+add_filter( 'term_link', 'mld_localize_permalink', 10, 1 );
+add_filter( 'post_type_archive_link', 'mld_localize_permalink', 10, 1 );
+
+/** Cac CPT co ho tro da ngon ngu (dung chung cho loc truy van ben duoi). */
+function mld_translatable_post_types() {
+	return array( 'su_kien', 'kinh', 'sach', 'thanh_ngon', 'giao_ly', 'tu_tinh', 'tin_tuc' );
+}
+
+/** Loc theo ngon ngu cho cac trang danh sach/chuyen muc/bai lien quan (khong phai truy van
+ * chinh xac dinh bai dang xem):
+ * - Che do EN/FR: chi hien thi bai DA dich (post co _mld_lang = ngon ngu hien tai), khong
+ *   hien thi lan ban goc tieng Viet hoac bai chua dich -- nhat quan voi viec de trong noi
+ *   dung chua dich tren trang bai don (mld_swap_to_translation).
+ * - Che do tieng Viet: LOAI cac bai da dich (co meta _mld_lang, vi day la ban sao rieng
+ *   duoc tao sau nen ngay tao moi hon, de lan vao muc "moi nhat" neu khong loc) -- chi con
+ *   lai bai goc tieng Viet, dung nhu mong doi tren mot site tieng Viet.
+ * KHONG dung vao truy van chinh cua trang bai don (main query + is_singular) vi co che swap
+ * ban dich da xu ly rieng o do. */
+function mld_filter_query_by_lang( $query ) {
+	if ( is_admin() ) { return; }
+	if ( $query->is_main_query() && $query->is_singular() ) { return; }
+
+	$translatable = mld_translatable_post_types();
+	$qtype        = $query->get( 'post_type' );
+	$types        = is_array( $qtype ) ? $qtype : array( $qtype );
+	$match        = false;
+	foreach ( $types as $t ) {
+		if ( in_array( $t, $translatable, true ) ) { $match = true; break; }
+	}
+
+	// Truy van chuyen muc theo taxonomy (vd /giao-ly-chuyen-muc/giao-ly/) thuong KHONG co
+	// 'post_type' trong query var (WP tu suy ra qua taxonomy) -- can anh xa nguoc ve post_type
+	// tuong ung de van loc dung, khong de lot bai chua dich qua cac trang chuyen muc nay.
+	if ( ! $match ) {
+		$tax_map = array(
+			'giao_ly_cat'    => 'giao_ly',
+			'thanh_ngon_cat' => 'thanh_ngon',
+			'tin_tuc_cat'    => 'tin_tuc',
+		);
+		foreach ( $tax_map as $tax => $pt ) {
+			if ( $query->get( $tax ) || $query->is_tax( $tax ) ) { $match = true; break; }
+		}
+	}
+	if ( ! $match ) { return; }
+
+	$lang       = mld_current_lang();
+	$meta_query = $query->get( 'meta_query' );
+	$meta_query = is_array( $meta_query ) ? $meta_query : array();
+
+	if ( 'vi' === $lang ) {
+		$meta_query[] = array( 'key' => '_mld_lang', 'compare' => 'NOT EXISTS' );
+	} else {
+		$meta_query[] = array( 'key' => '_mld_lang', 'value' => $lang );
+	}
+	$query->set( 'meta_query', $meta_query );
+}
+add_action( 'pre_get_posts', 'mld_filter_query_by_lang' );
 
 /** Bản dịch nhãn menu chính (VI => [EN, FR]). Nhãn không có trong bảng vẫn hiển thị nguyên văn tiếng Việt. */
 function mld_menu_label_map() {
@@ -722,3 +868,5 @@ function mld_handle_contact_form() {
 }
 add_action( 'admin_post_nopriv_mld_contact', 'mld_handle_contact_form' );
 add_action( 'admin_post_mld_contact', 'mld_handle_contact_form' );
+
+

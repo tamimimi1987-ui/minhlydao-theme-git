@@ -34,7 +34,16 @@
       <p><b>Địa chỉ:</b> <?php echo esc_html( get_theme_mod( 'mld_addr', 'Số 82, Đường Cao Thắng, Phường Bàn Cờ, TP.HCM.' ) ); ?></p>
       <p><b>Điện thoại:</b> <?php echo esc_html( get_theme_mod( 'mld_phone', '(84) (28) 3835 8181' ) ); ?></p>
       <p><b>Email:</b> <?php echo esc_html( get_theme_mod( 'mld_email', 'tamtongmieu1924@gmail.com' ) ); ?></p>
-      <?php $mld_cs = get_page_by_path( 'chinh-sach-website' ); ?>
+      <?php
+      // Trang này là trang con (Trang cha: Giới thiệu) nên get_page_by_path() theo slug đơn
+      // sẽ không tìm ra — tra theo 'name' (post_name) để không phụ thuộc cấp phân trang.
+      $mld_cs_posts = get_posts( array(
+        'post_type'      => 'page',
+        'name'           => 'chinh-sach-website',
+        'posts_per_page' => 1,
+      ) );
+      $mld_cs = $mld_cs_posts ? $mld_cs_posts[0] : null;
+      ?>
       <?php if ( $mld_cs ) : ?><p><a href="<?php echo esc_url( get_permalink( $mld_cs ) ); ?>">Chính sách sử dụng website</a></p><?php endif; ?>
     </div>
   </div>

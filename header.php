@@ -17,7 +17,11 @@ $banner_bg   = get_theme_mod( 'mld_banner_bg', $banner_base . 'banner_tam_tong_m
 <div class="hero-banner site-banner">
   <img class="hero-bg" src="<?php echo esc_url( $banner_bg ); ?>" alt="">
   <a href="<?php echo esc_url( home_url( '/' ) ); ?>"><img class="hero-logo" src="<?php echo esc_url( $banner_base . 'logo.png' ); ?>" alt="Biểu tượng Tam Giáo"></a>
-  <a href="<?php echo esc_url( home_url( '/' ) ); ?>"><img class="hero-text" src="<?php echo esc_url( $banner_base . 'minh_ly_dao_1.png' ); ?>" alt="Minh Lý Đạo - Tam Tông Miếu"></a>
+  <a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="hero-text" aria-label="Minh Lý Đạo - Tam Tông Miếu">
+    <span class="ht-line1">MINH LÝ ĐẠO</span>
+    <span class="ht-line2">TAM-TÔNG MIẾU</span>
+    <span class="ht-line3">廟&nbsp;&nbsp;宗&nbsp;&nbsp;㆔</span>
+  </a>
 </div>
 
 <header class="site-header">
@@ -35,8 +39,10 @@ $banner_bg   = get_theme_mod( 'mld_banner_bg', $banner_base . 'banner_tam_tong_m
     </nav>
     <div class="lang">
       <a href="<?php echo esc_url( mld_lang_switch_url( 'vi' ) ); ?>"><img src="https://minhlydao.org.vn/templates/images/vi.png" alt="VN" width="18"> VI</a>
-      <a href="<?php echo esc_url( mld_lang_switch_url( 'en' ) ); ?>"><img src="https://minhlydao.org.vn/templates/images/en.png" alt="EN" width="18"> EN</a>
-      <a href="<?php echo esc_url( mld_lang_switch_url( 'fr' ) ); ?>"><img src="https://minhlydao.org.vn/templates/images/fr.png" alt="FR" width="18"> FR</a>
+      <!-- TAM AN nut EN/FR den khi ban dich xong va chinh xac. Doan code goc (de bat lai sau):
+      <a href="EN_URL"><img src="https://minhlydao.org.vn/templates/images/en.png" alt="EN" width="18"> EN</a>
+      <a href="FR_URL"><img src="https://minhlydao.org.vn/templates/images/fr.png" alt="FR" width="18"> FR</a>
+      Xem lich su git de lay lai code PHP that (co goi mld_lang_switch_url). -->
     </div>
   </div>
 </header>
