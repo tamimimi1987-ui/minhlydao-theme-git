@@ -349,4 +349,4 @@ a{color:inherit;text-decoration:none}
 .mld-lich-info-table th{text-align:left;color:var(--muted);font-weight:600;padding:5px 10px 5px 0;white-space:nowrap;vertical-align:top}
 .mld-lich-info-table td{padding:5px 0}
 .mld-lich-gio-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.mld-lich-gio-list li{display:flex;                                                                                                                                                                                                                                                                                                                                                                                                                          
+.mld-lich-gio-list li{display:flex;
