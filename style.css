@@ -54,11 +54,9 @@ a{color:inherit;text-decoration:none}
 /* Banner tĩnh (thay cho hero slideshow cũ) */
 .hero-banner{position:relative;width:100%;aspect-ratio:1389/233;overflow:hidden;background:#bcdef3}
 .hero-banner .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-.hero-banner .hero-logo{position:absolute;left:2.4%;top:11%;height:78%;width:auto}
-.hero-banner .hero-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;text-align:center;line-height:1.05;font-family:"Times New Roman",Times,serif;font-weight:700;white-space:nowrap}
-.hero-banner .hero-text .ht-line1{color:#1e73c8;font-size:clamp(13px,3.3vw,40px);font-family:"Times New Roman",Times,"Liberation Serif",serif}
-.hero-banner .hero-text .ht-line2{color:#e42313;font-size:clamp(11px,2.8vw,34px)}
-.hero-banner .hero-text .ht-line3{color:#e42313;font-size:clamp(7px,1.5vw,18px);letter-spacing:.15em;margin-top:2px}
+.hero-banner .hero-logo{position:absolute;left:8.71%;top:1.25%;height:73.9%;width:auto}
+.hero-banner .hero-text{position:absolute;left:35.59%;top:3.04%;height:70.35%;width:28.83%;display:block}
+.hero-banner .hero-text img{width:100%;height:100%;object-fit:contain;display:block}
 
 /* Sections */
 .section{padding:36px 0}
@@ -351,4 +349,4 @@ a{color:inherit;text-decoration:none}
 .mld-lich-info-table th{text-align:left;color:var(--muted);font-weight:600;padding:5px 10px 5px 0;white-space:nowrap;vertical-align:top}
 .mld-lich-info-table td{padding:5px 0}
 .mld-lich-gio-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.mld-lich-gio-list li{display:flex;
+.mld-lich-gio-list li{display:flex;                                                                                                                                                                                                                                                                                                                                                                                                                    
