@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.93.0' );
+define( 'MLD_VER', '2.94.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
