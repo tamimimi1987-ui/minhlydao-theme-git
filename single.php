@@ -17,6 +17,7 @@ while ( have_posts() ) : the_post();
 	}
 ?>
 <div class="page-head"><div class="wrap"><?php mld_breadcrumb(); ?><h1><?php the_title(); ?></h1></div></div>
+<div class="section single-section">
 <article class="content-area">
 	<?php if ( has_post_thumbnail() && ! $has_video ) : ?>
 		<div style="margin-bottom:30px"><?php the_post_thumbnail( 'large', array( 'style' => 'width:100%;border-radius:10px' ) ); ?></div>
@@ -32,4 +33,5 @@ while ( have_posts() ) : the_post();
 
 	<p style="margin-top:40px"><a class="btn" href="<?php echo esc_url( $back_url ); ?>" onclick="var r=document.referrer;if(r&&r.indexOf(window.location.host)!==-1&&r.indexOf(window.location.href)===-1){window.location.href=r;return false;}"><?php echo esc_html( $back_label ); ?></a></p>
 </article>
+</div>
 <?php endwhile; get_footer(); ?>

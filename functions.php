@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.95.0' );
+define( 'MLD_VER', '2.100.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -762,7 +762,7 @@ function mld_breadcrumb() {
 	} elseif ( is_singular() ) {
 		$pt_obj = get_post_type_object( get_post_type() );
 		if ( in_array( get_post_type(), array( 'kinh', 'sach', 'thanh_ngon' ), true ) ) {
-			$trail[] = '<a href="' . esc_url( get_post_type_archive_link( 'kinh' ) ) . '">Kinh – sách</a>';
+			$trail[] = '<a href="' . esc_url( home_url( '/kinh-sach/' ) ) . '">Kinh – sách</a>';
 		}
 		if ( $pt_obj && $pt_obj->has_archive ) {
 			$trail[] = '<a href="' . esc_url( get_post_type_archive_link( get_post_type() ) ) . '">' . esc_html( $pt_obj->labels->name ) . '</a>';
@@ -779,11 +779,18 @@ function mld_breadcrumb() {
 		}
 	} elseif ( is_post_type_archive() ) {
 		if ( in_array( get_query_var( 'post_type' ), array( 'kinh', 'sach', 'thanh_ngon' ), true ) ) {
-			$trail[] = '<a href="' . esc_url( get_post_type_archive_link( 'kinh' ) ) . '">Kinh – sách</a>';
+			$trail[] = '<a href="' . esc_url( home_url( '/kinh-sach/' ) ) . '">Kinh – sách</a>';
 		}
 		$trail[] = '<span>' . esc_html( post_type_archive_title( '', false ) ) . '</span>';
 	} elseif ( is_home() ) {
 		$trail[] = '<span>Tin tức</span>';
+	} elseif ( is_tax( 'thanh_ngon_cat' ) ) {
+		$trail[] = '<a href="' . esc_url( home_url( '/kinh-sach/' ) ) . '">Kinh – sách</a>';
+		$trail[] = '<a href="' . esc_url( get_post_type_archive_link( 'thanh_ngon' ) ) . '">Thánh Ngôn</a>';
+		$trail[] = '<span>' . esc_html( single_term_title( '', false ) ) . '</span>';
+	} elseif ( is_tax( 'giao_ly_cat' ) ) {
+		$trail[] = '<a href="' . esc_url( get_post_type_archive_link( 'giao_ly' ) ) . '">Giáo lý</a>';
+		$trail[] = '<span>' . esc_html( single_term_title( '', false ) ) . '</span>';
 	} elseif ( is_category() || is_tag() || is_archive() ) {
 		$trail[] = '<span>' . esc_html( single_cat_title( '', false ) ) . '</span>';
 	}
