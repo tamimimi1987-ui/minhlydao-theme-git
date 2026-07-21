@@ -67,3 +67,14 @@ $banner_bg   = get_theme_mod( 'mld_banner_bg', $banner_base . 'banner_tam_tong_m
     </div>
   </div>
 </header>
+<script>
+(function(){
+  var h = document.querySelector('.site-header');
+  if(!h) return;
+  function setHeaderH(){
+    document.documentElement.style.setProperty('--mld-header-h', h.offsetHeight + 'px');
+  }
+  setHeaderH();
+  window.addEventListener('resize', setHeaderH);
+})();
+</script>
