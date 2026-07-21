@@ -32,9 +32,16 @@ $q = new WP_Query( array(
 			<?php wp_reset_postdata();
 		elseif ( $q->have_posts() ) : ?>
 		<div class="news-grid">
+			<?php $mld_ico_url = get_template_directory_uri() . '/assets/images/banner/logo.png'; ?>
 			<?php while ( $q->have_posts() ) : $q->the_post(); ?>
 			<article class="post-card">
-				<a class="thumb" href="<?php the_permalink(); ?>"><?php if ( has_post_thumbnail() ) { the_post_thumbnail( 'medium' ); } ?></a>
+				<a class="thumb ico-thumb" href="<?php the_permalink(); ?>">
+					<?php if ( has_post_thumbnail() ) : ?>
+						<?php the_post_thumbnail( 'medium' ); ?>
+					<?php else : ?>
+						<img src="<?php echo esc_url( $mld_ico_url ); ?>" alt="<?php the_title_attribute(); ?>">
+					<?php endif; ?>
+				</a>
 				<div class="pbody">
 					<span class="tag"><?php echo esc_html( $name ); ?></span>
 					<h3><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h3>

@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.100.0' );
+define( 'MLD_VER', '2.125.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -801,16 +801,38 @@ function mld_breadcrumb() {
 /* ------------------------------------------------------------------
  * 8. Form Liên hệ (trang page-lien-he.php)
  * ------------------------------------------------------------------ */
+/**
+ * Sinh 2 số ngẫu nhiên cho captcha đơn giản (dạng "A + B = ?"),
+ * kèm mã xác thực (hash) để chống giả mạo giá trị A/B khi gửi form.
+ * Không phụ thuộc dịch vụ ngoài (không cần API key reCAPTCHA).
+ */
+function mld_captcha_generate() {
+	$a     = wp_rand( 1, 9 );
+	$b     = wp_rand( 1, 9 );
+	$token = wp_hash( $a . ':' . $b, 'mld_captcha' );
+	return array( 'a' => $a, 'b' => $b, 'token' => $token );
+}
+
+function mld_captcha_verify( $a, $b, $token, $answer ) {
+	$a = (int) $a;
+	$b = (int) $b;
+	if ( ! hash_equals( wp_hash( $a . ':' . $b, 'mld_captcha' ), (string) $token ) ) {
+		return false;
+	}
+	return ( $a + $b ) === (int) $answer;
+}
+
 function mld_contact_form() {
-	$sent  = isset( $_GET['mld_contact'] ) && 'ok' === $_GET['mld_contact'];
-	$error = isset( $_GET['mld_contact'] ) && 'error' === $_GET['mld_contact'];
+	$sent    = isset( $_GET['mld_contact'] ) && 'ok' === $_GET['mld_contact'];
+	$error   = isset( $_GET['mld_contact'] ) && 'error' === $_GET['mld_contact'];
+	$captcha = mld_captcha_generate();
 	?>
 	<div class="contact-form-wrap">
 		<?php if ( $sent ) : ?>
 			<p class="form-notice form-notice-ok">Cảm ơn quý đạo hữu/đạo tâm đã gửi yêu cầu. Chúng tôi sẽ phản hồi sớm nhất có thể.</p>
 		<?php endif; ?>
 		<?php if ( $error ) : ?>
-			<p class="form-notice form-notice-err">Có lỗi xảy ra, vui lòng kiểm tra lại thông tin và gửi lại.</p>
+			<p class="form-notice form-notice-err">Có lỗi xảy ra, vui lòng kiểm tra lại thông tin (và mã xác nhận) rồi gửi lại.</p>
 		<?php endif; ?>
 		<form class="mld-contact-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 			<input type="hidden" name="action" value="mld_contact">
@@ -834,6 +856,13 @@ function mld_contact_form() {
 				<label for="mld_message">Nội dung *</label>
 				<textarea id="mld_message" name="mld_message" rows="5" required></textarea>
 			</div>
+			<div class="form-row mld-captcha-row">
+				<label for="mld_captcha_answer">Mã xác nhận: <?php echo (int) $captcha['a']; ?> + <?php echo (int) $captcha['b']; ?> = ? *</label>
+				<input type="hidden" name="mld_captcha_a" value="<?php echo (int) $captcha['a']; ?>">
+				<input type="hidden" name="mld_captcha_b" value="<?php echo (int) $captcha['b']; ?>">
+				<input type="hidden" name="mld_captcha_token" value="<?php echo esc_attr( $captcha['token'] ); ?>">
+				<input type="text" inputmode="numeric" autocomplete="off" id="mld_captcha_answer" name="mld_captcha_answer" class="mld-captcha-input" required>
+			</div>
 			<button type="submit" class="btn">Gửi yêu cầu</button>
 		</form>
 	</div>
@@ -850,6 +879,16 @@ function mld_handle_contact_form() {
 	// Honeypot: nếu bot điền vào ô ẩn thì âm thầm bỏ qua.
 	if ( ! empty( $_POST['mld_website'] ) ) {
 		wp_safe_redirect( add_query_arg( 'mld_contact', 'ok', $redirect ) );
+		exit;
+	}
+
+	// Captcha: kiểm tra "A + B = ?" và mã hash chống giả mạo.
+	$cap_a      = isset( $_POST['mld_captcha_a'] ) ? $_POST['mld_captcha_a'] : '';
+	$cap_b      = isset( $_POST['mld_captcha_b'] ) ? $_POST['mld_captcha_b'] : '';
+	$cap_token  = isset( $_POST['mld_captcha_token'] ) ? $_POST['mld_captcha_token'] : '';
+	$cap_answer = isset( $_POST['mld_captcha_answer'] ) ? $_POST['mld_captcha_answer'] : '';
+	if ( ! mld_captcha_verify( $cap_a, $cap_b, $cap_token, $cap_answer ) ) {
+		wp_safe_redirect( add_query_arg( 'mld_contact', 'error', $redirect ) );
 		exit;
 	}
 
@@ -875,5 +914,251 @@ function mld_handle_contact_form() {
 }
 add_action( 'admin_post_nopriv_mld_contact', 'mld_handle_contact_form' );
 add_action( 'admin_post_mld_contact', 'mld_handle_contact_form' );
+
+/* ------------------------------------------------------------------
+ * 9. Trình xem PDF cho Kinh/Sách: dựng sẵn ảnh từng trang phía server
+ *    (không nhúng file PDF gốc lên trình duyệt => không có gì để tải xuống)
+ * ------------------------------------------------------------------ */
+/**
+ * Endpoint admin: chuyển từng trang PDF của một bài Kinh/Sách thành ảnh JPG
+ * (ưu tiên Imagick, dự phòng lệnh pdftoppm), lưu vào uploads/mld-pdf-pages/{id}/
+ * và ghi danh sách URL ảnh vào post meta _mld_pdf_pages (JSON).
+ */
+add_action( 'wp_ajax_mld_convert_pdf_pages', 'mld_convert_pdf_pages_handler' );
+function mld_convert_pdf_pages_handler() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( 'no' );
+	}
+	if ( function_exists( 'set_time_limit' ) ) {
+		@set_time_limit( 180 );
+	}
+	$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+	$post    = $post_id ? get_post( $post_id ) : null;
+	if ( ! $post ) {
+		wp_send_json( array( 'error' => 'khong tim thay bai viet' ) );
+	}
+	if ( ! preg_match( '/href="([^"]+\.pdf)"/i', $post->post_content, $m ) ) {
+		wp_send_json( array( 'error' => 'khong tim thay file pdf trong noi dung bai' ) );
+	}
+	$pdf_url  = $m[1];
+	$upload   = wp_upload_dir();
+	$pdf_path = str_replace( $upload['baseurl'], $upload['basedir'], $pdf_url );
+	if ( ! file_exists( $pdf_path ) ) {
+		wp_send_json( array( 'error' => 'khong tim thay file pdf tren dia: ' . $pdf_path ) );
+	}
+	$out_dir = trailingslashit( $upload['basedir'] ) . 'mld-pdf-pages/' . $post_id;
+	$out_url = trailingslashit( $upload['baseurl'] ) . 'mld-pdf-pages/' . $post_id;
+	if ( ! file_exists( $out_dir ) ) {
+		wp_mkdir_p( $out_dir );
+	}
+	$urls = array();
+	if ( class_exists( 'Imagick' ) ) {
+		try {
+			$im = new Imagick();
+			$im->setResolution( 130, 130 );
+			$im->readImage( $pdf_path );
+			$i = 0;
+			foreach ( $im as $page ) {
+				$i++;
+				$page->setImageFormat( 'jpg' );
+				$page->setImageCompressionQuality( 82 );
+				$name = 'page-' . str_pad( $i, 3, '0', STR_PAD_LEFT ) . '.jpg';
+				$page->writeImage( $out_dir . '/' . $name );
+				$urls[] = $out_url . '/' . $name;
+			}
+			$im->clear();
+		} catch ( Exception $e ) {
+			wp_send_json( array( 'error' => 'Imagick error: ' . $e->getMessage() ) );
+		}
+	} elseif ( function_exists( 'shell_exec' ) ) {
+		$safe_pdf = escapeshellarg( $pdf_path );
+		$safe_out = escapeshellarg( $out_dir . '/page' );
+		shell_exec( "pdftoppm -jpeg -r 130 {$safe_pdf} {$safe_out} 2>&1" );
+		$files = glob( $out_dir . '/page*.jpg' );
+		natsort( $files );
+		foreach ( $files as $f ) {
+			$urls[] = $out_url . '/' . basename( $f );
+		}
+	}
+	if ( ! $urls ) {
+		wp_send_json( array( 'error' => 'Server khong co Imagick hoac pdftoppm de convert PDF sang anh' ) );
+	}
+	update_post_meta( $post_id, '_mld_pdf_pages', wp_json_encode( $urls ) );
+	wp_send_json( array( 'ok' => true, 'count' => count( $urls ), 'urls' => $urls ) );
+}
+
+add_filter( 'the_content', 'mld_embed_pdf_viewer', 20 );
+function mld_embed_pdf_viewer( $content ) {
+	if ( is_admin() || ! in_the_loop() || ! is_main_query() ) {
+		return $content;
+	}
+	$post_type = get_post_type();
+	if ( ! in_array( $post_type, array( 'kinh', 'sach' ), true ) ) {
+		return $content;
+	}
+	// Tìm khối "File" của Gutenberg (<div class="wp-block-file">...<a href="....pdf">...</div>).
+	if ( ! preg_match( '/<div class="wp-block-file">.*?<\/div>/is', $content, $m ) ) {
+		return $content;
+	}
+	$pages_json = get_post_meta( get_the_ID(), '_mld_pdf_pages', true );
+	$pages      = $pages_json ? json_decode( $pages_json, true ) : array();
+	if ( ! $pages ) {
+		// Chưa convert xong (chưa gọi endpoint), giữ nguyên link PDF gốc.
+		return $content;
+	}
+	$pages_attr = esc_attr( wp_json_encode( array_map( 'esc_url_raw', $pages ) ) );
+
+	// Kiểu cuộn dọc (đã duyệt sau trial trên Kinh Giác-Thế) áp dụng cho mọi Kinh/Sách.
+	if ( true ) {
+		$html  = '<div class="mld-pdf-scroll" data-pages="' . $pages_attr . '">';
+		$html .= '<div class="mld-pdf-scroll-toolbar">';
+		$html .= '<button type="button" class="mld-pdf-prev" aria-label="Trang trước">&#8249;</button>';
+		$html .= '<button type="button" class="mld-pdf-zoomout" aria-label="Thu nhỏ chữ">&#8722;</button>';
+		$html .= '<button type="button" class="mld-pdf-zoomin" aria-label="Phóng to chữ">+</button>';
+		$html .= '<span class="mld-pdf-pagenum">Trang <input type="number" class="mld-pdf-pageinput" min="1" max="' . count( $pages ) . '" value="1"> / <b class="mld-pdf-total">' . count( $pages ) . '</b></span>';
+		$html .= '<button type="button" class="mld-pdf-next" aria-label="Trang sau">&#8250;</button>';
+		$html .= '</div>';
+		$html .= '<div class="mld-pdf-scroll-stage" oncontextmenu="return false">';
+		foreach ( $pages as $i => $p_url ) {
+			$n = $i + 1;
+			$html .= '<img class="mld-pdf-page" data-page="' . $n . '" src="' . esc_url( $p_url ) . '" draggable="false" loading="' . ( $n <= 2 ? 'eager' : 'lazy' ) . '" alt="Trang ' . $n . '">';
+		}
+		$html .= '</div></div>';
+		$html .= '<script>(function(){
+document.querySelectorAll(".mld-pdf-scroll").forEach(function(root){
+	if(root.dataset.mldInit)return; root.dataset.mldInit="1";
+	var stage=root.querySelector(".mld-pdf-scroll-stage"), pageInput=root.querySelector(".mld-pdf-pageinput");
+	var imgs=Array.prototype.slice.call(root.querySelectorAll(".mld-pdf-page"));
+	var curIdx=0, ticking=false, zoomLevel=1;
+	stage.addEventListener("contextmenu",function(e){e.preventDefault();});
+	function updateCur(){
+		ticking=false;
+		var stageRect=stage.getBoundingClientRect();
+		var centerY=stageRect.top+stageRect.height/2;
+		var bestIdx=0, bestDist=Infinity;
+		for(var i=0;i<imgs.length;i++){
+			var r=imgs[i].getBoundingClientRect();
+			if(r.height===0)continue;
+			var mid=r.top+r.height/2;
+			var dist=Math.abs(mid-centerY);
+			if(dist<bestDist){bestDist=dist;bestIdx=i;}
+		}
+		curIdx=bestIdx;
+		if(document.activeElement!==pageInput) pageInput.value=imgs[bestIdx].getAttribute("data-page");
+	}
+	stage.addEventListener("scroll",function(){
+		if(!ticking){ ticking=true; setTimeout(function(){ updateCur(); },50); }
+	},{passive:true});
+	updateCur();
+	function goTo(i){
+		if(i<0||i>=imgs.length)return;
+		var stageRect=stage.getBoundingClientRect();
+		var imgRect=imgs[i].getBoundingClientRect();
+		var targetScrollTop=stage.scrollTop+(imgRect.top-stageRect.top);
+		stage.scrollTo({top:targetScrollTop,behavior:"smooth"});
+		curIdx=i;
+		pageInput.value=imgs[i].getAttribute("data-page");
+	}
+	root.querySelector(".mld-pdf-prev").addEventListener("click",function(){ goTo(curIdx-1); });
+	root.querySelector(".mld-pdf-next").addEventListener("click",function(){ goTo(curIdx+1); });
+	function jumpFromInput(){
+		var v=parseInt(pageInput.value,10);
+		if(isNaN(v))return;
+		v=Math.max(1,Math.min(imgs.length,v));
+		goTo(v-1);
+	}
+	pageInput.addEventListener("keydown",function(e){
+		e.stopPropagation();
+		if(e.key==="Enter"){ e.preventDefault(); jumpFromInput(); pageInput.blur(); }
+	});
+	pageInput.addEventListener("change",jumpFromInput);
+	function applyZoom(){
+		var baseWidth=stage.clientWidth-32;
+		imgs.forEach(function(img){
+			if(zoomLevel===1){ img.style.width=""; img.style.maxWidth=""; }
+			else { img.style.maxWidth="none"; img.style.width=Math.round(baseWidth*zoomLevel)+"px"; }
+		});
+		stage.style.overflowX = zoomLevel>1 ? "auto" : "hidden";
+	}
+	root.querySelector(".mld-pdf-zoomin").addEventListener("click",function(){ zoomLevel=Math.min(2.5, Math.round((zoomLevel+0.25)*100)/100); applyZoom(); });
+	root.querySelector(".mld-pdf-zoomout").addEventListener("click",function(){ zoomLevel=Math.max(0.5, Math.round((zoomLevel-0.25)*100)/100); applyZoom(); });
+	document.addEventListener("keydown",function(e){
+		if(!root.isConnected)return;
+		if(document.activeElement===pageInput)return;
+		var rect=root.getBoundingClientRect();
+		if(rect.bottom<0||rect.top>window.innerHeight)return;
+		if(e.key==="ArrowLeft")goTo(curIdx-1); if(e.key==="ArrowRight")goTo(curIdx+1);
+	});
+});
+})();</script>';
+		return str_replace( $m[0], $html, $content );
+	}
+
+	// Kiểu lật-từng-trang (mặc định hiện tại cho các bài chưa vào trial).
+	$html  = '<div class="mld-pdf-flip" data-pages="' . $pages_attr . '">';
+	$html .= '<div class="mld-pdf-flip-toolbar">';
+	$html .= '<button type="button" class="mld-pdf-prev" aria-label="Trang trước">&#8249;</button>';
+	$html .= '<span class="mld-pdf-pagenum">Trang <b class="mld-pdf-cur">1</b> / <b class="mld-pdf-total">' . count( $pages ) . '</b></span>';
+	$html .= '<button type="button" class="mld-pdf-next" aria-label="Trang sau">&#8250;</button>';
+	$html .= '</div>';
+	$html .= '<div class="mld-pdf-flip-stage" oncontextmenu="return false">';
+	$html .= '<img class="mld-pdf-flip-img" src="' . esc_url( $pages[0] ) . '" draggable="false" alt="Trang 1">';
+	$html .= '<button type="button" class="mld-pdf-zone mld-pdf-zone-l" aria-label="Trang trước"></button>';
+	$html .= '<button type="button" class="mld-pdf-zone mld-pdf-zone-r" aria-label="Trang sau"></button>';
+	$html .= '</div></div>';
+	$html .= '<script>(function(){
+document.querySelectorAll(".mld-pdf-flip").forEach(function(root){
+	if(root.dataset.mldInit)return; root.dataset.mldInit="1";
+	var pages=JSON.parse(root.getAttribute("data-pages"));
+	var idx=0, img=root.querySelector(".mld-pdf-flip-img"), cur=root.querySelector(".mld-pdf-cur");
+	function render(){ img.src=pages[idx]; cur.textContent=idx+1; }
+	function prev(){ if(idx>0){idx--;render();} }
+	function next(){ if(idx<pages.length-1){idx++;render();} }
+	root.querySelector(".mld-pdf-prev").addEventListener("click",prev);
+	root.querySelector(".mld-pdf-next").addEventListener("click",next);
+	root.querySelector(".mld-pdf-zone-l").addEventListener("click",prev);
+	root.querySelector(".mld-pdf-zone-r").addEventListener("click",next);
+	root.querySelector(".mld-pdf-flip-stage").addEventListener("contextmenu",function(e){e.preventDefault();});
+	document.addEventListener("keydown",function(e){
+		if(!root.isConnected)return;
+		var rect=root.getBoundingClientRect();
+		if(rect.bottom<0||rect.top>window.innerHeight)return;
+		if(e.key==="ArrowLeft")prev(); if(e.key==="ArrowRight")next();
+	});
+});
+})();</script>';
+	return str_replace( $m[0], $html, $content );
+}
+
+/**
+ * "Cùng thể loại": liệt kê vài bài khác cùng post_type (Kinh hoặc Sách),
+ * hiển thị bên dưới nội dung bài Kinh/Sách.
+ */
+function mld_render_kinh_sach_related() {
+	$post_type = get_post_type();
+	if ( ! in_array( $post_type, array( 'kinh', 'sach' ), true ) ) {
+		return;
+	}
+	$related = get_posts( array(
+		'post_type'      => $post_type,
+		'post__not_in'   => array( get_the_ID() ),
+		'posts_per_page' => 3,
+		'orderby'        => 'menu_order title',
+		'order'          => 'ASC',
+		'no_found_rows'  => true,
+	) );
+	if ( ! $related ) {
+		return;
+	}
+	echo '<div class="mld-related-books"><h3>Cùng thể loại</h3><div class="mld-related-grid">';
+	foreach ( $related as $r ) {
+		echo '<a class="mld-related-card" href="' . esc_url( get_permalink( $r ) ) . '">';
+		if ( has_post_thumbnail( $r ) ) {
+			echo get_the_post_thumbnail( $r, 'medium', array( 'style' => 'width:100%;height:auto;border-radius:6px' ) );
+		}
+		echo '<span>' . esc_html( get_the_title( $r ) ) . '</span></a>';
+	}
+	echo '</div></div>';
+}
 
 

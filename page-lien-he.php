@@ -7,6 +7,7 @@ get_header();
 while ( have_posts() ) : the_post();
 ?>
 <div class="page-head"><div class="wrap"><?php mld_breadcrumb(); ?><h1><?php the_title(); ?></h1></div></div>
+<div class="section single-section">
 <article class="content-area">
 	<div class="entry-content"><?php the_content(); ?></div>
 
@@ -23,4 +24,5 @@ while ( have_posts() ) : the_post();
 		</div>
 	</div>
 </article>
+</div>
 <?php endwhile; get_footer(); ?>

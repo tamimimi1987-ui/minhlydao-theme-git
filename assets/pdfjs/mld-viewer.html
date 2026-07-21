@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Xem Kinh/Sách</title>
+<style>
+  html,body{margin:0;padding:0;background:#eef2f5;height:100%;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+  #toolbar{display:flex;align-items:center;justify-content:center;gap:10px;background:#0e2f4f;color:#fff;padding:8px 10px;font-size:14px;user-select:none}
+  #toolbar button{background:#1d5aca;color:#fff;border:none;border-radius:5px;padding:6px 12px;cursor:pointer;font-size:14px}
+  #toolbar button:hover{background:#2a6fe0}
+  #toolbar button:disabled{opacity:.4;cursor:default}
+  #pageInfo{min-width:90px;text-align:center}
+  #viewerWrap{position:absolute;top:42px;left:0;right:0;bottom:0;overflow:auto;display:flex;justify-content:center;background:#dfe6ec}
+  #canvasHolder{padding:16px 0;text-align:center}
+  canvas{box-shadow:0 2px 10px rgba(0,0,0,.25);background:#fff;max-width:100%;height:auto}
+  #msg{color:#333;padding:40px;text-align:center;font-size:15px}
+  #zoomLabel{min-width:46px;text-align:center}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button id="prevBtn" title="Trang trước">‹ Trước</button>
+  <span id="pageInfo">…</span>
+  <button id="nextBtn" title="Trang sau">Sau ›</button>
+  <span style="width:14px"></span>
+  <button id="zoomOut" title="Thu nhỏ">−</button>
+  <span id="zoomLabel">100%</span>
+  <button id="zoomIn" title="Phóng to">+</button>
+</div>
+<div id="viewerWrap"><div id="canvasHolder"><div id="msg">Đang tải…</div></div></div>
+
+<script type="module">
+import * as pdfjsLib from './build/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.min.mjs';
+
+const params = new URLSearchParams(window.location.search);
+const fileUrl = params.get('file');
+const holder = document.getElementById('canvasHolder');
+const pageInfo = document.getElementById('pageInfo');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const zoomLabel = document.getElementById('zoomLabel');
+
+let pdfDoc = null;
+let pageNum = 1;
+let scale = 1.1;
+let rendering = false;
+
+function setMsg(t){ holder.innerHTML = '<div id="msg">' + t + '</div>'; }
+
+async function renderPage(n){
+  if (!pdfDoc || rendering) return;
+  rendering = true;
+  const page = await pdfDoc.getPage(n);
+  const viewport = page.getViewport({ scale });
+  let canvas = document.getElementById('pdfCanvas');
+  if (!canvas) {
+    holder.innerHTML = '';
+    canvas = document.createElement('canvas');
+    canvas.id = 'pdfCanvas';
+    holder.appendChild(canvas);
+  }
+  const ctx = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  rendering = false;
+  pageInfo.textContent = 'Trang ' + n + ' / ' + pdfDoc.numPages;
+  prevBtn.disabled = n <= 1;
+  nextBtn.disabled = n >= pdfDoc.numPages;
+  zoomLabel.textContent = Math.round(scale / 1.1 * 100) + '%';
+}
+
+async function init(){
+  if (!fileUrl) { setMsg('Thiếu tham số file PDF.'); return; }
+  try {
+    const loadingTask = pdfjsLib.getDocument({
+      url: fileUrl,
+      cMapUrl: './cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: './standard_fonts/'
+    });
+    pdfDoc = await loadingTask.promise;
+    await renderPage(pageNum);
+  } catch (e) {
+    setMsg('Không tải được tài liệu PDF. (' + (e && e.message ? e.message : 'lỗi') + ')');
+  }
+}
+
+prevBtn.addEventListener('click', () => { if (pageNum > 1) { pageNum--; renderPage(pageNum); } });
+nextBtn.addEventListener('click', () => { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum++; renderPage(pageNum); } });
+document.getElementById('zoomIn').addEventListener('click', () => { scale = Math.min(scale + 0.15, 3); renderPage(pageNum); });
+document.getElementById('zoomOut').addEventListener('click', () => { scale = Math.max(scale - 0.15, 0.4); renderPage(pageNum); });
+
+// Rào cản không cho tải/lưu/in trong khung xem (không tuyệt đối, chỉ ngăn thao tác thông thường).
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  const k = e.key ? e.key.toLowerCase() : '';
+  if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'p' || k === 'u')) { e.preventDefault(); }
+});
+document.addEventListener('dragstart', e => e.preventDefault());
+
+init();
+</script>
+</body>
+</html>
