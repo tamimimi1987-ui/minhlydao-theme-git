@@ -424,3 +424,12 @@ body.mld-lich-modal-open{overflow:hidden}
   .mld-tutinh-table,.mld-tutinh-table tbody,.mld-tutinh-table tr,.mld-tutinh-table td{display:block;width:100%}
   .mld-tutinh-table th{display:block;width:100%}
 }
+
+/* Canh so thu tu doan tho (1.-, 2.-...) sang cot rieng ben trai, giong site cu */
+.mld-stanza{display:flex;justify-content:center;align-items:flex-start;gap:8px}
+.mld-stanza-num{flex:0 0 auto;min-width:32px;text-align:left}
+.mld-stanza-lines{flex:0 1 auto;max-width:620px}
+@media(max-width:700px){
+  .mld-stanza{gap:6px}
+  .mld-stanza-num{min-width:26px;font-size:14.5px}
+}
