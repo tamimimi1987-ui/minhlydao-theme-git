@@ -16,9 +16,10 @@ get_header();
 			<div>
 				<h2><?php echo esc_html( get_theme_mod( 'mld_intro_title', 'MINH LÝ ĐẠO – TAM TÔNG MIẾU' ) ); ?></h2>
 				<?php
-				$mld_policy_page = get_page_by_path( 'chinh-sach-website' );
+				$mld_policy_page = get_page_by_path( 'gioi-thieu/chinh-sach-website' );
+				if ( ! $mld_policy_page ) { $mld_policy_page = get_page_by_path( 'chinh-sach-website' ); }
 				$mld_policy_url  = $mld_policy_page ? get_permalink( $mld_policy_page ) : '';
-				$mld_policy_link = $mld_policy_url ? '<a href="' . esc_url( $mld_policy_url ) . '">Chính sách sử dụng website</a>' : 'Chính sách sử dụng website';
+				$mld_policy_link = $mld_policy_url ? '<a href="' . esc_url( $mld_policy_url ) . '" class="mld-policy-link">Chính sách sử dụng website</a>' : 'Chính sách sử dụng website';
 				$default_body = "Chào mừng quý đạo hữu, đạo tâm đến với trang Web của MINH LÝ ĐẠO – TAM TÔNG MIẾU (gọi tắt là Minh Lý Đạo).\n\nMinh Lý Đạo là một mối Đạo được Thượng Đế khai sáng bằng linh điển tại Việt Nam để tất cả mọi người từ thiện tín đến môn sanh có thể theo đó tự học, tự tu để quay về với Chánh Pháp mà Thiêng-Liêng đã ban trao.\n\nWebsite minhlydao.org.vn là trang Web chính thống và duy nhất của Hội Thánh Minh Lý Đạo nhằm qua đó quý đạo hữu/đạo tâm trong và ngoài nước Việt Nam sẽ từng bước biết rõ về Kinh sách, giáo luật, giáo lý, . . . . . và các hoạt động “tốt đời – đẹp Đạo” của Minh Lý Đạo. Website hoạt động dựa trên Hiến chương của Minh Lý Đạo và {$mld_policy_link} (đính kèm bên dưới).\n\nRất mong trang Web minhlydao.org.vn sẽ là một nhịp cầu giúp cho tất cả mọi người, quý đạo hữu/đạo tâm trên bước đường tu học để tự độ và giác tha.";
 				$default_note = 'CHÚ Ý: Ban biên tập Website minhlydao.org.vn không công nhận và không chịu trách nhiệm mọi thông tin không xuất phát từ trang Web nầy. — BBT. Website';
 				$body = get_theme_mod( 'mld_intro_body', $default_body );

@@ -9,7 +9,11 @@ require_once get_template_directory() . '/inc/lunar-calendar.php';
 get_header();
 
 $today = getdate();
-$month = isset( $_GET['m'] ) ? max( 1, min( 12, (int) $_GET['m'] ) ) : (int) $today['mon'];
+// Luu y: KHONG dung ten tham so 'm' vi day la query var noi bo cua WordPress
+// (dung cho date archive theo dinh dang YYYY/YYYYMM/YYYYMMDD). Neu dat ten 'm' thi
+// khi bam doi thang (?m=8) WP se hieu nham thanh truy van date-archive va tra ve
+// trang "Luu tru" rong (hoac 404) thay vi hien lich - da xay ra bug nay truoc do.
+$month = isset( $_GET['thang'] ) ? max( 1, min( 12, (int) $_GET['thang'] ) ) : (int) $today['mon'];
 $year  = isset( $_GET['y'] ) ? max( 1950, min( 2100, (int) $_GET['y'] ) ) : (int) $today['year'];
 
 $first_ts     = mktime( 0, 0, 0, $month, 1, $year );
@@ -54,7 +58,7 @@ while ( have_posts() ) : the_post();
 
 	<div class="mld-lich">
 		<form class="mld-lich-picker" method="get" action="<?php echo esc_url( $page_url ); ?>">
-			<select name="m">
+			<select name="thang">
 				<?php foreach ( $month_names as $mnum => $mlabel ) : ?>
 					<option value="<?php echo (int) $mnum; ?>" <?php selected( $mnum, $month ); ?>><?php echo esc_html( $mlabel ); ?></option>
 				<?php endforeach; ?>
@@ -65,8 +69,8 @@ while ( have_posts() ) : the_post();
 				<?php endfor; ?>
 			</select>
 			<button type="submit" class="btn">Xem</button>
-			<a class="mld-lich-nav" href="<?php echo esc_url( add_query_arg( array( 'm' => $prev_m, 'y' => $prev_y ), $page_url ) ); ?>">‹ Tháng trước</a>
-			<a class="mld-lich-nav" href="<?php echo esc_url( add_query_arg( array( 'm' => $next_m, 'y' => $next_y ), $page_url ) ); ?>">Tháng sau ›</a>
+			<a class="mld-lich-nav" href="<?php echo esc_url( add_query_arg( array( 'thang' => $prev_m, 'y' => $prev_y ), $page_url ) ); ?>">‹ Tháng trước</a>
+			<a class="mld-lich-nav" href="<?php echo esc_url( add_query_arg( array( 'thang' => $next_m, 'y' => $next_y ), $page_url ) ); ?>">Tháng sau ›</a>
 		</form>
 
 		<h2 class="mld-lich-title"><?php echo esc_html( $month_names[ $month ] . ' năm ' . $year ); ?></h2>

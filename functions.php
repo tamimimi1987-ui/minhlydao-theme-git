@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.129.0' );
+define( 'MLD_VER', '2.143.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -795,7 +795,7 @@ function mld_breadcrumb() {
 		$trail[] = '<span>' . esc_html( single_cat_title( '', false ) ) . '</span>';
 	}
 
-	echo '<nav class="breadcrumb" aria-label="breadcrumb">' . implode( '<span class="sep">/</span>', $trail ) . '</nav>'; // phpcs:ignore
+	echo '<nav class="breadcrumb" aria-label="breadcrumb">' . implode( '<span class="sep"> </span>', $trail ) . '</nav>'; // phpcs:ignore
 }
 
 /* ------------------------------------------------------------------
@@ -1078,7 +1078,15 @@ document.querySelectorAll(".mld-pdf-scroll").forEach(function(root){
 			if(zoomLevel===1){ img.style.width=""; img.style.maxWidth=""; }
 			else { img.style.maxWidth="none"; img.style.width=Math.round(baseWidth*zoomLevel)+"px"; }
 		});
-		stage.style.overflowX = zoomLevel>1 ? "auto" : "hidden";
+		if(zoomLevel>1){
+			stage.classList.add("mld-pdf-zoomed");
+			setTimeout(function(){
+				stage.scrollLeft = (stage.scrollWidth - stage.clientWidth) / 2;
+			}, 0);
+		} else {
+			stage.classList.remove("mld-pdf-zoomed");
+			stage.scrollLeft = 0;
+		}
 	}
 	root.querySelector(".mld-pdf-zoomin").addEventListener("click",function(){ zoomLevel=Math.min(2.5, Math.round((zoomLevel+0.25)*100)/100); applyZoom(); });
 	root.querySelector(".mld-pdf-zoomout").addEventListener("click",function(){ zoomLevel=Math.max(0.5, Math.round((zoomLevel-0.25)*100)/100); applyZoom(); });
