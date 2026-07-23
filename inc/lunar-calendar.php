@@ -314,7 +314,7 @@ function mld_get_day_info( $dd, $mm, $yy ) {
 	list( $lday, $lmonth, $lyear, $lleap ) = mld_solar_to_lunar( $dd, $mm, $yy );
 	$truc      = mld_get_truc( $jd, $lmonth );
 	$hoang_dao = mld_get_hoang_dao_ngay( $jd, $lmonth );
-	return array(
+	$info = array(
 		'duong'        => array( 'd' => $dd, 'm' => $mm, 'y' => $yy ),
 		'am'           => array( 'd' => $lday, 'm' => $lmonth, 'y' => $lyear, 'nhuan' => (bool) $lleap ),
 		'can_chi_ngay' => mld_can_chi_day( $jd ),
@@ -325,4 +325,14 @@ function mld_get_day_info( $dd, $mm, $yy ) {
 		'gio_hoang_dao'=> mld_get_gio_hoang_dao( $jd ),
 		'tiet_khi'     => mld_get_tiet_khi( $dd, $mm, $yy ),
 	);
+
+	// Neu Admin da nhap ghi de tay cho ngay nay (qua trang wp-admin "Ghi de Lich"),
+	// uu tien dung gia tri do thay vi cong thuc tu dong tinh o tren. Xem functions.php
+	// muc 10 (mld_apply_lich_override) - chi ghi de o nao Admin co nhap, cac o con
+	// lai van giu nguyen ket qua cong thuc.
+	if ( function_exists( 'mld_apply_lich_override' ) ) {
+		$info = mld_apply_lich_override( $info, $dd, $mm, $yy );
+	}
+
+	return $info;
 }

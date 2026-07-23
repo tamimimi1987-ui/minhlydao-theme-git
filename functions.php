@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.143.0' );
+define( 'MLD_VER', '2.144.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -1167,6 +1167,208 @@ function mld_render_kinh_sach_related() {
 		echo '<span>' . esc_html( get_the_title( $r ) ) . '</span></a>';
 	}
 	echo '</div></div>';
+}
+
+/* ------------------------------------------------------------------
+ * 10. Ghi đè thủ công thông tin Lịch Tam Tông Miếu (Admin override)
+ *     Cho phép Admin nhập tay giá trị cho 1 ngày cụ thể (Âm lịch, Can Chi,
+ *     Trực, Sao, Hoàng đạo/Hắc đạo, Tiết khí) — nếu có, giá trị nhập tay sẽ
+ *     được ưu tiên hiển thị thay cho công thức tự động tính trong
+ *     inc/lunar-calendar.php. Ô nào để trống thì ô đó vẫn dùng công thức
+ *     tự động như bình thường (không ảnh hưởng các ngày chưa được ghi đè).
+ * ------------------------------------------------------------------ */
+function mld_lich_override_table_name() {
+	global $wpdb;
+	return $wpdb->prefix . 'mld_lich_override';
+}
+
+/** Tạo bảng lưu ghi đè (chạy 1 lần, tự kiểm tra qua option version). */
+function mld_lich_override_maybe_create_table() {
+	if ( get_option( 'mld_lich_override_db_ver' ) === '1.0' ) {
+		return;
+	}
+	global $wpdb;
+	$table           = mld_lich_override_table_name();
+	$charset_collate = $wpdb->get_charset_collate();
+	$sql             = "CREATE TABLE $table (
+		ngay DATE NOT NULL,
+		am_d SMALLINT NULL,
+		am_m SMALLINT NULL,
+		am_y SMALLINT NULL,
+		am_nhuan TINYINT NULL,
+		can_chi_ngay VARCHAR(20) NULL,
+		can_chi_thang VARCHAR(20) NULL,
+		can_chi_nam VARCHAR(20) NULL,
+		truc VARCHAR(20) NULL,
+		sao VARCHAR(30) NULL,
+		hoang_dao TINYINT NULL,
+		tiet_khi_vi VARCHAR(30) NULL,
+		ghi_chu TEXT NULL,
+		updated_at DATETIME NULL,
+		PRIMARY KEY  (ngay)
+	) $charset_collate;";
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	dbDelta( $sql );
+	update_option( 'mld_lich_override_db_ver', '1.0' );
+}
+add_action( 'init', 'mld_lich_override_maybe_create_table' );
+
+/** Áp dụng ghi đè (nếu có) lên $info trả về từ mld_get_day_info(). Được gọi từ inc/lunar-calendar.php. */
+function mld_apply_lich_override( $info, $dd, $mm, $yy ) {
+	global $wpdb;
+	$table = mld_lich_override_table_name();
+	$ngay  = sprintf( '%04d-%02d-%02d', $yy, $mm, $dd );
+	$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE ngay = %s", $ngay ) ); // phpcs:ignore
+
+	if ( ! $row ) {
+		return $info;
+	}
+	if ( null !== $row->am_d && null !== $row->am_m && null !== $row->am_y ) {
+		$info['am']['d'] = (int) $row->am_d;
+		$info['am']['m'] = (int) $row->am_m;
+		$info['am']['y'] = (int) $row->am_y;
+	}
+	if ( null !== $row->am_nhuan ) {
+		$info['am']['nhuan'] = (bool) $row->am_nhuan;
+	}
+	if ( $row->can_chi_ngay ) {
+		$info['can_chi_ngay'] = $row->can_chi_ngay;
+	}
+	if ( $row->can_chi_thang ) {
+		$info['can_chi_thang'] = $row->can_chi_thang;
+	}
+	if ( $row->can_chi_nam ) {
+		$info['can_chi_nam'] = $row->can_chi_nam;
+	}
+	if ( $row->truc ) {
+		$info['truc'] = $row->truc;
+	}
+	if ( $row->sao ) {
+		$info['hoang_dao']['name'] = $row->sao;
+	}
+	if ( null !== $row->hoang_dao ) {
+		$info['hoang_dao']['hoang_dao'] = (bool) $row->hoang_dao;
+	}
+	if ( $row->tiet_khi_vi ) {
+		$info['tiet_khi']['vi']       = $row->tiet_khi_vi;
+		$info['tiet_khi']['is_start'] = true;
+	}
+	$info['mld_overridden'] = true;
+	return $info;
+}
+
+/** Trang quản trị: nhập / xem / xóa ghi đè theo ngày. */
+function mld_lich_override_admin_menu() {
+	add_menu_page(
+		'Ghi đè Lịch Tam Tông Miếu',
+		'Ghi đè Lịch',
+		'manage_options',
+		'mld-lich-override',
+		'mld_lich_override_admin_page',
+		'dashicons-calendar-alt',
+		58
+	);
+}
+add_action( 'admin_menu', 'mld_lich_override_admin_menu' );
+
+function mld_lich_override_admin_page() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+	global $wpdb;
+	$table = mld_lich_override_table_name();
+
+	// Lưu ghi đè.
+	if ( isset( $_POST['mld_override_save'] ) && check_admin_referer( 'mld_lich_override_save' ) ) {
+		$ngay = isset( $_POST['ngay'] ) ? sanitize_text_field( wp_unslash( $_POST['ngay'] ) ) : '';
+		if ( $ngay && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $ngay ) ) {
+			$text_fields = array( 'can_chi_ngay', 'can_chi_thang', 'can_chi_nam', 'truc', 'sao', 'tiet_khi_vi' );
+			$data        = array( 'ngay' => $ngay );
+			foreach ( $text_fields as $f ) {
+				$v         = isset( $_POST[ $f ] ) ? sanitize_text_field( wp_unslash( $_POST[ $f ] ) ) : '';
+				$data[ $f ] = ( '' === $v ) ? null : $v;
+			}
+			foreach ( array( 'am_d', 'am_m', 'am_y' ) as $f ) {
+				$v         = isset( $_POST[ $f ] ) ? sanitize_text_field( wp_unslash( $_POST[ $f ] ) ) : '';
+				$data[ $f ] = ( '' === $v ) ? null : (int) $v;
+			}
+			$data['am_nhuan'] = isset( $_POST['am_nhuan'] ) ? 1 : null;
+			$data['hoang_dao'] = ( isset( $_POST['hoang_dao'] ) && '' !== $_POST['hoang_dao'] ) ? (int) $_POST['hoang_dao'] : null;
+			$data['ghi_chu']   = isset( $_POST['ghi_chu'] ) ? sanitize_textarea_field( wp_unslash( $_POST['ghi_chu'] ) ) : null;
+			$data['updated_at'] = current_time( 'mysql' );
+			$wpdb->replace( $table, $data ); // phpcs:ignore
+			echo '<div class="notice notice-success"><p>Đã lưu ghi đè cho ngày ' . esc_html( date_i18n( 'd/m/Y', strtotime( $ngay ) ) ) . '.</p></div>';
+		} else {
+			echo '<div class="notice notice-error"><p>Vui lòng chọn ngày hợp lệ.</p></div>';
+		}
+	}
+
+	// Xóa ghi đè.
+	if ( isset( $_GET['mld_delete'] ) && check_admin_referer( 'mld_lich_override_delete' ) ) {
+		$wpdb->delete( $table, array( 'ngay' => sanitize_text_field( wp_unslash( $_GET['mld_delete'] ) ) ) ); // phpcs:ignore
+		echo '<div class="notice notice-success"><p>Đã xóa ghi đè.</p></div>';
+	}
+
+	$rows = $wpdb->get_results( "SELECT * FROM $table ORDER BY ngay DESC" ); // phpcs:ignore
+	?>
+	<div class="wrap">
+		<h1>Ghi đè thông tin Lịch Tam Tông Miếu</h1>
+		<p>Nhập giá trị cho 1 ngày cụ thể bên dưới. Ô nào có nhập giá trị thì ô đó sẽ hiển thị đúng như nhập (thay cho công thức tự động); ô nào để trống thì vẫn dùng công thức tự động tính như bình thường.</p>
+		<form method="post">
+			<?php wp_nonce_field( 'mld_lich_override_save' ); ?>
+			<table class="form-table">
+				<tr><th><label for="mld_ngay">Ngày (dương lịch) *</label></th><td><input type="date" id="mld_ngay" name="ngay" required></td></tr>
+				<tr><th>Âm lịch — ngày</th><td><input type="number" name="am_d" min="1" max="30"></td></tr>
+				<tr><th>Âm lịch — tháng</th><td><input type="number" name="am_m" min="1" max="12"></td></tr>
+				<tr><th>Âm lịch — năm</th><td><input type="number" name="am_y"></td></tr>
+				<tr><th>Tháng nhuận</th><td><label><input type="checkbox" name="am_nhuan" value="1"> Đúng, đây là tháng nhuận</label></td></tr>
+				<tr><th>Can Chi ngày</th><td><input type="text" name="can_chi_ngay" placeholder="Vd: Kỷ Hợi"></td></tr>
+				<tr><th>Can Chi tháng</th><td><input type="text" name="can_chi_thang" placeholder="Vd: Ất Mùi"></td></tr>
+				<tr><th>Can Chi năm</th><td><input type="text" name="can_chi_nam" placeholder="Vd: Bính Ngọ"></td></tr>
+				<tr><th>Trực</th><td><input type="text" name="truc" placeholder="Vd: Định"></td></tr>
+				<tr><th>Sao (Nhị thập bát tú)</th><td><input type="text" name="sao" placeholder="Vd: Minh Đường"></td></tr>
+				<tr><th>Hoàng đạo / Hắc đạo</th><td>
+					<select name="hoang_dao">
+						<option value="">— Không ghi đè —</option>
+						<option value="1">Hoàng đạo (tốt)</option>
+						<option value="0">Hắc đạo (xấu)</option>
+					</select>
+				</td></tr>
+				<tr><th>Tiết khí</th><td><input type="text" name="tiet_khi_vi" placeholder="Vd: Đại Thử"></td></tr>
+				<tr><th>Ghi chú nội bộ</th><td><textarea name="ghi_chu" rows="2" class="large-text"></textarea></td></tr>
+			</table>
+			<?php submit_button( 'Lưu ghi đè', 'primary', 'mld_override_save' ); ?>
+		</form>
+
+		<h2>Danh sách ghi đè hiện có</h2>
+		<table class="widefat striped">
+			<thead><tr><th>Ngày</th><th>Nội dung ghi đè</th><th>Cập nhật lúc</th><th></th></tr></thead>
+			<tbody>
+			<?php if ( $rows ) : foreach ( $rows as $r ) : ?>
+				<tr>
+					<td><?php echo esc_html( date_i18n( 'd/m/Y', strtotime( $r->ngay ) ) ); ?></td>
+					<td><?php
+						$parts = array();
+						if ( $r->am_d ) { $parts[] = 'Âm lịch: ' . $r->am_d . '/' . $r->am_m . '/' . $r->am_y; }
+						if ( $r->can_chi_ngay ) { $parts[] = 'CC ngày: ' . $r->can_chi_ngay; }
+						if ( $r->can_chi_thang ) { $parts[] = 'CC tháng: ' . $r->can_chi_thang; }
+						if ( $r->can_chi_nam ) { $parts[] = 'CC năm: ' . $r->can_chi_nam; }
+						if ( $r->truc ) { $parts[] = 'Trực: ' . $r->truc; }
+						if ( $r->sao ) { $parts[] = 'Sao: ' . $r->sao; }
+						if ( null !== $r->hoang_dao ) { $parts[] = $r->hoang_dao ? 'Hoàng đạo' : 'Hắc đạo'; }
+						if ( $r->tiet_khi_vi ) { $parts[] = 'Tiết khí: ' . $r->tiet_khi_vi; }
+						echo esc_html( implode( ' · ', $parts ) );
+					?></td>
+					<td><?php echo esc_html( $r->updated_at ); ?></td>
+					<td><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=mld-lich-override&mld_delete=' . $r->ngay ), 'mld_lich_override_delete' ) ); ?>" onclick="return confirm('Xóa ghi đè ngày này?');">Xóa</a></td>
+				</tr>
+			<?php endforeach; else : ?>
+				<tr><td colspan="4">Chưa có ghi đè nào.</td></tr>
+			<?php endif; ?>
+			</tbody>
+		</table>
+	</div>
+	<?php
 }
 
 
