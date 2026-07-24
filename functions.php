@@ -5,7 +5,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'MLD_VER', '2.144.0' );
+define( 'MLD_VER', '2.177.0' );
 
 /* ------------------------------------------------------------------
  * 1. Thiết lập theme
@@ -453,6 +453,17 @@ function mld_strip_lang_prefix( $do_parse, $wp, $extra_query_vars ) {
 		$rest   = isset( $m[3] ) && '' !== trim( $m[3], '/' ) ? $m[3] : '/';
 		$prefix = $m[1]; // '' hoặc '/index.php'
 
+		// Neu day la mot trang WP that su (con cua hub "en"/"fr", co URL rieng
+		// giu nguyen tien to, VD index.php/en/introduction/, index.php/en/doctrine/,
+		// index.php/en/contact/...) thi KHONG boc tien to - de WordPress tu phan
+		// giai binh thuong theo cau truc trang cha-con that su, tranh 404/redirect loop.
+		if ( '/' !== $rest ) {
+			$full_path = trim( $m[2] . $rest, '/' );
+			if ( get_page_by_path( $full_path, OBJECT, 'page' ) ) {
+				return $do_parse;
+			}
+		}
+
 		if ( isset( $_SERVER['REQUEST_URI'] ) ) {
 			$qs = strpos( $_SERVER['REQUEST_URI'], '?' );
 			$_SERVER['REQUEST_URI'] = $prefix . $rest . ( false !== $qs ? substr( $_SERVER['REQUEST_URI'], $qs ) : '' );
@@ -611,6 +622,30 @@ function mld_lang_switch_url( $lang ) {
 				return home_url( $map[ $orig->post_name ][ $lang ] );
 			}
 		}
+		// Chieu nguoc lai: dang xem 1 trang EN/FR (dich tu 1 Page tieng Viet) ma bam ve VI --
+		// ban dich khong dung chung slug voi ban VI nen phai do nguoc trong bang anh xa
+		// mld_page_translation_map(). Neu khong tim thay (vd dang o ngay hub "en"/"fr")
+		// thi ve thang trang chu, tranh tu-tro ve chinh trang dang xem.
+		if ( $orig && 'page' === $orig->post_type && 'vi' === $lang ) {
+			if ( ! $orig->post_parent && in_array( $orig->post_name, array( 'en', 'fr' ), true ) ) {
+				return home_url( '/' );
+			}
+			$map_rev = mld_page_translation_map();
+			foreach ( $map_rev as $vi_slug => $targets ) {
+				foreach ( $targets as $t_path ) {
+					$t_parts = explode( '/', trim( $t_path, '/' ) );
+					$t_last = end( $t_parts );
+					if ( $t_last === $orig->post_name ) {
+						$vi_posts = get_posts( array( 'name' => $vi_slug, 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => 1 ) );
+						$vi_page = $vi_posts ? $vi_posts[0] : null;
+						if ( $vi_page ) {
+							return get_permalink( $vi_page->ID );
+						}
+					}
+				}
+			}
+			return home_url( '/' );
+		}
 		// Voi cac CPT (su_kien, kinh, sach, thanh_ngon, giao_ly, tu_tinh, tin_tuc...) -- neu da co
 		// bai dich lien ket qua _mld_lang_group thi tro thang toi URL that cua bai dich do,
 		// thay vi dung tien to /en/ chung chung (bai dich co slug rieng, khong giong bai goc).
@@ -620,7 +655,11 @@ function mld_lang_switch_url( $lang ) {
 				return get_permalink( $translated );
 			}
 		}
+		// Bo tam filter permalink toan site (mld_localize_permalink) khi lay permalink goc,
+		// vi filter do se tu chen tien to ngon ngu HIEN TAI vao, lam $base bi sai khi lang la 'vi'.
+		remove_filter( 'post_type_link', 'mld_localize_permalink', 10 );
 		$base = get_permalink( $GLOBALS['mld_original_post_id'] );
+		add_filter( 'post_type_link', 'mld_localize_permalink', 10, 2 );
 		return 'vi' === $lang ? $base : mld_localize_url( $base, $lang );
 	}
 	if ( 'vi' === $lang ) { return home_url( '/' ); }
@@ -709,15 +748,16 @@ function mld_menu_label_map() {
 		'Giới thiệu'         => array( 'en' => 'About us',        'fr' => 'À propos' ),
 		'Giáo lý'            => array( 'en' => 'Doctrine',        'fr' => 'Doctrine' ),
 		'Tu tịnh'            => array( 'en' => 'Practice',        'fr' => 'Pratique' ),
-		'Kinh – Sách'        => array( 'en' => 'Scriptures',      'fr' => 'Écritures' ),
-		'Kinh - sách'        => array( 'en' => 'Scriptures',      'fr' => 'Écritures' ),
+		'Kinh – Sách'        => array( 'en' => 'Book',            'fr' => 'Écritures' ),
+		'Kinh - Sách'        => array( 'en' => 'Book',            'fr' => 'Écritures' ),
+		'Kinh - sách'        => array( 'en' => 'Book',            'fr' => 'Écritures' ),
 		'Kinh'               => array( 'en' => 'Bible',           'fr' => 'Bible' ),
 		'Sách'               => array( 'en' => 'Book',            'fr' => 'Livre' ),
 		'Thánh ngôn'         => array( 'en' => 'Holy Word',       'fr' => 'Parole Sainte' ),
 		'Thánh Ngôn'         => array( 'en' => 'Holy Word',       'fr' => 'Parole Sainte' ),
-		'Thư viện'           => array( 'en' => 'Book library',    'fr' => 'Bibliothèque' ),
+		'Thư viện'           => array( 'en' => 'Library',         'fr' => 'Bibliothèque' ),
 		'Media'              => array( 'en' => 'Media',           'fr' => 'Média' ),
-		'Lịch'               => array( 'en' => 'Calendar of the Three Temples', 'fr' => 'Calendrier' ),
+		'Lịch'               => array( 'en' => 'Calendar', 'fr' => 'Calendrier' ),
 		'Tin tức'            => array( 'en' => 'News',            'fr' => 'Actualités' ),
 		'Liên hệ'            => array( 'en' => 'Contact us',      'fr' => 'Contactez-nous' ),
 		'Thư ngỏ'            => array( 'en' => 'Cover letter',    'fr' => 'Lettre ouverte' ),
@@ -1169,20 +1209,22 @@ function mld_render_kinh_sach_related() {
 	echo '</div></div>';
 }
 
+
+
+
 /* ------------------------------------------------------------------
- * 10. Ghi đè thủ công thông tin Lịch Tam Tông Miếu (Admin override)
- *     Cho phép Admin nhập tay giá trị cho 1 ngày cụ thể (Âm lịch, Can Chi,
- *     Trực, Sao, Hoàng đạo/Hắc đạo, Tiết khí) — nếu có, giá trị nhập tay sẽ
- *     được ưu tiên hiển thị thay cho công thức tự động tính trong
- *     inc/lunar-calendar.php. Ô nào để trống thì ô đó vẫn dùng công thức
- *     tự động như bình thường (không ảnh hưởng các ngày chưa được ghi đè).
+ * 10. Ghi de thu cong thong tin Lich Tam Tong Mieu (Admin override)
+ *     Cho phep Admin nhap tay gia tri cho 1 ngay cu the (Am lich, Can Chi,
+ *     Truc, Sao, Hoang dao/Hac dao, Tiet khi) - neu co, gia tri nhap tay se
+ *     duoc uu tien hien thi thay cho cong thuc tu dong tinh trong
+ *     inc/lunar-calendar.php. O nao de trong thi o do van dung cong thuc
+ *     tu dong nhu binh thuong (khong anh huong cac ngay chua duoc ghi de).
  * ------------------------------------------------------------------ */
 function mld_lich_override_table_name() {
 	global $wpdb;
 	return $wpdb->prefix . 'mld_lich_override';
 }
 
-/** Tạo bảng lưu ghi đè (chạy 1 lần, tự kiểm tra qua option version). */
 function mld_lich_override_maybe_create_table() {
 	if ( get_option( 'mld_lich_override_db_ver' ) === '1.0' ) {
 		return;
@@ -1213,12 +1255,11 @@ function mld_lich_override_maybe_create_table() {
 }
 add_action( 'init', 'mld_lich_override_maybe_create_table' );
 
-/** Áp dụng ghi đè (nếu có) lên $info trả về từ mld_get_day_info(). Được gọi từ inc/lunar-calendar.php. */
 function mld_apply_lich_override( $info, $dd, $mm, $yy ) {
 	global $wpdb;
 	$table = mld_lich_override_table_name();
 	$ngay  = sprintf( '%04d-%02d-%02d', $yy, $mm, $dd );
-	$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE ngay = %s", $ngay ) ); // phpcs:ignore
+	$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE ngay = %s", $ngay ) );
 
 	if ( ! $row ) {
 		return $info;
@@ -1257,7 +1298,6 @@ function mld_apply_lich_override( $info, $dd, $mm, $yy ) {
 	return $info;
 }
 
-/** Trang quản trị: nhập / xem / xóa ghi đè theo ngày. */
 function mld_lich_override_admin_menu() {
 	add_menu_page(
 		'Ghi đè Lịch Tam Tông Miếu',
@@ -1278,7 +1318,6 @@ function mld_lich_override_admin_page() {
 	global $wpdb;
 	$table = mld_lich_override_table_name();
 
-	// Lưu ghi đè.
 	if ( isset( $_POST['mld_override_save'] ) && check_admin_referer( 'mld_lich_override_save' ) ) {
 		$ngay = isset( $_POST['ngay'] ) ? sanitize_text_field( wp_unslash( $_POST['ngay'] ) ) : '';
 		if ( $ngay && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $ngay ) ) {
@@ -1296,20 +1335,97 @@ function mld_lich_override_admin_page() {
 			$data['hoang_dao'] = ( isset( $_POST['hoang_dao'] ) && '' !== $_POST['hoang_dao'] ) ? (int) $_POST['hoang_dao'] : null;
 			$data['ghi_chu']   = isset( $_POST['ghi_chu'] ) ? sanitize_textarea_field( wp_unslash( $_POST['ghi_chu'] ) ) : null;
 			$data['updated_at'] = current_time( 'mysql' );
-			$wpdb->replace( $table, $data ); // phpcs:ignore
+			$wpdb->replace( $table, $data );
 			echo '<div class="notice notice-success"><p>Đã lưu ghi đè cho ngày ' . esc_html( date_i18n( 'd/m/Y', strtotime( $ngay ) ) ) . '.</p></div>';
 		} else {
 			echo '<div class="notice notice-error"><p>Vui lòng chọn ngày hợp lệ.</p></div>';
 		}
 	}
 
-	// Xóa ghi đè.
 	if ( isset( $_GET['mld_delete'] ) && check_admin_referer( 'mld_lich_override_delete' ) ) {
-		$wpdb->delete( $table, array( 'ngay' => sanitize_text_field( wp_unslash( $_GET['mld_delete'] ) ) ) ); // phpcs:ignore
+		$wpdb->delete( $table, array( 'ngay' => sanitize_text_field( wp_unslash( $_GET['mld_delete'] ) ) ) );
 		echo '<div class="notice notice-success"><p>Đã xóa ghi đè.</p></div>';
 	}
 
-	$rows = $wpdb->get_results( "SELECT * FROM $table ORDER BY ngay DESC" ); // phpcs:ignore
+	// Import hang loat tu file CSV.
+	if ( isset( $_POST['mld_override_import'] ) && check_admin_referer( 'mld_lich_override_import' ) ) {
+		if ( ! empty( $_FILES['mld_csv_file']['tmp_name'] ) && is_uploaded_file( $_FILES['mld_csv_file']['tmp_name'] ) ) {
+			$handle = fopen( $_FILES['mld_csv_file']['tmp_name'], 'r' );
+			if ( $handle ) {
+				$header = fgetcsv( $handle );
+				if ( ! $header ) {
+					echo '<div class="notice notice-error"><p>File CSV rỗng hoặc không đọc được.</p></div>';
+				} else {
+					$header[0] = preg_replace( '/^\xEF\xBB\xBF/', '', $header[0] );
+					$header    = array_map( function( $h ) {
+						return strtolower( trim( $h ) );
+					}, $header );
+					$known     = array( 'ngay', 'am_d', 'am_m', 'am_y', 'am_nhuan', 'can_chi_ngay', 'can_chi_thang', 'can_chi_nam', 'truc', 'sao', 'hoang_dao', 'tiet_khi_vi', 'ghi_chu' );
+					$col_index = array();
+					foreach ( $header as $i => $h ) {
+						if ( in_array( $h, $known, true ) ) {
+							$col_index[ $h ] = $i;
+						}
+					}
+					if ( ! isset( $col_index['ngay'] ) ) {
+						echo '<div class="notice notice-error"><p>File CSV thiếu cột "ngay". Vui lòng dùng đúng file mẫu.</p></div>';
+					} else {
+						$success = 0;
+						$skip    = 0;
+						$errors  = array();
+						$row_num = 1;
+						while ( ( $row = fgetcsv( $handle ) ) !== false ) {
+							$row_num++;
+							$non_empty = array_filter( $row, function( $v ) {
+								return trim( (string) $v ) !== '';
+							} );
+							if ( empty( $non_empty ) ) {
+								continue;
+							}
+							$get = function( $key ) use ( $row, $col_index ) {
+								return ( isset( $col_index[ $key ] ) && isset( $row[ $col_index[ $key ] ] ) ) ? trim( (string) $row[ $col_index[ $key ] ] ) : '';
+							};
+							$ngay = $get( 'ngay' );
+							if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $ngay ) ) {
+								$errors[] = 'Dong ' . $row_num . ': ngày không hợp lệ (' . $ngay . ')';
+								$skip++;
+								continue;
+							}
+							$data = array( 'ngay' => $ngay );
+							foreach ( array( 'can_chi_ngay', 'can_chi_thang', 'can_chi_nam', 'truc', 'sao', 'tiet_khi_vi' ) as $f ) {
+								$v          = $get( $f );
+								$data[ $f ] = ( '' === $v ) ? null : sanitize_text_field( $v );
+							}
+							foreach ( array( 'am_d', 'am_m', 'am_y' ) as $f ) {
+								$v          = $get( $f );
+								$data[ $f ] = ( '' === $v ) ? null : (int) $v;
+							}
+							$nhuan_v           = $get( 'am_nhuan' );
+							$data['am_nhuan']  = ( '' === $nhuan_v ) ? null : ( (int) $nhuan_v ? 1 : null );
+							$hd_v              = $get( 'hoang_dao' );
+							$data['hoang_dao'] = ( '' === $hd_v ) ? null : ( (int) $hd_v === 1 ? 1 : 0 );
+							$gc_v              = $get( 'ghi_chu' );
+							$data['ghi_chu']   = ( '' === $gc_v ) ? null : sanitize_textarea_field( $gc_v );
+							$data['updated_at'] = current_time( 'mysql' );
+							$wpdb->replace( $table, $data );
+							$success++;
+						}
+						fclose( $handle );
+						echo '<div class="notice notice-success"><p>Da import ' . intval( $success ) . ' dòng.' . ( $skip ? ' Bo qua ' . intval( $skip ) . ' dòng lỗi.' : '' ) . '</p></div>';
+						if ( $errors ) {
+							echo '<div class="notice notice-warning"><p>' . esc_html( implode( '; ', array_slice( $errors, 0, 10 ) ) ) . '</p></div>';
+						}
+					}
+				}
+			} else {
+				echo '<div class="notice notice-error"><p>Không thể đọc file CSV vừa upload.</p></div>';
+			}
+		} else {
+			echo '<div class="notice notice-error"><p>Vui lòng chọn file CSV.</p></div>';
+		}
+	}
+
+	$rows = $wpdb->get_results( "SELECT * FROM $table ORDER BY ngay DESC" );
 	?>
 	<div class="wrap">
 		<h1>Ghi đè thông tin Lịch Tam Tông Miếu</h1>
@@ -1318,9 +1434,9 @@ function mld_lich_override_admin_page() {
 			<?php wp_nonce_field( 'mld_lich_override_save' ); ?>
 			<table class="form-table">
 				<tr><th><label for="mld_ngay">Ngày (dương lịch) *</label></th><td><input type="date" id="mld_ngay" name="ngay" required></td></tr>
-				<tr><th>Âm lịch — ngày</th><td><input type="number" name="am_d" min="1" max="30"></td></tr>
-				<tr><th>Âm lịch — tháng</th><td><input type="number" name="am_m" min="1" max="12"></td></tr>
-				<tr><th>Âm lịch — năm</th><td><input type="number" name="am_y"></td></tr>
+				<tr><th>Âm lịch - ngày</th><td><input type="number" name="am_d" min="1" max="30"></td></tr>
+				<tr><th>Âm lịch - tháng</th><td><input type="number" name="am_m" min="1" max="12"></td></tr>
+				<tr><th>Âm lịch - năm</th><td><input type="number" name="am_y"></td></tr>
 				<tr><th>Tháng nhuận</th><td><label><input type="checkbox" name="am_nhuan" value="1"> Đúng, đây là tháng nhuận</label></td></tr>
 				<tr><th>Can Chi ngày</th><td><input type="text" name="can_chi_ngay" placeholder="Vd: Kỷ Hợi"></td></tr>
 				<tr><th>Can Chi tháng</th><td><input type="text" name="can_chi_thang" placeholder="Vd: Ất Mùi"></td></tr>
@@ -1329,7 +1445,7 @@ function mld_lich_override_admin_page() {
 				<tr><th>Sao (Nhị thập bát tú)</th><td><input type="text" name="sao" placeholder="Vd: Minh Đường"></td></tr>
 				<tr><th>Hoàng đạo / Hắc đạo</th><td>
 					<select name="hoang_dao">
-						<option value="">— Không ghi đè —</option>
+						<option value="">- Không ghi đè -</option>
 						<option value="1">Hoàng đạo (tốt)</option>
 						<option value="0">Hắc đạo (xấu)</option>
 					</select>
@@ -1338,6 +1454,14 @@ function mld_lich_override_admin_page() {
 				<tr><th>Ghi chú nội bộ</th><td><textarea name="ghi_chu" rows="2" class="large-text"></textarea></td></tr>
 			</table>
 			<?php submit_button( 'Lưu ghi đè', 'primary', 'mld_override_save' ); ?>
+		</form>
+
+		<h2>Import hàng loạt từ file CSV</h2>
+		<p>Tải file Excel mẫu, điền dữ liệu, lưu (Save As) sang định dạng CSV, rồi chọn file CSV đó để upload. Xem hướng dẫn chi tiết trong sheet "Huong_dan" của file mẫu.</p>
+		<form method="post" enctype="multipart/form-data">
+			<?php wp_nonce_field( 'mld_lich_override_import' ); ?>
+			<input type="file" name="mld_csv_file" accept=".csv" required>
+			<?php submit_button( 'Import CSV', 'secondary', 'mld_override_import' ); ?>
 		</form>
 
 		<h2>Danh sách ghi đè hiện có</h2>
@@ -1357,7 +1481,7 @@ function mld_lich_override_admin_page() {
 						if ( $r->sao ) { $parts[] = 'Sao: ' . $r->sao; }
 						if ( null !== $r->hoang_dao ) { $parts[] = $r->hoang_dao ? 'Hoàng đạo' : 'Hắc đạo'; }
 						if ( $r->tiet_khi_vi ) { $parts[] = 'Tiết khí: ' . $r->tiet_khi_vi; }
-						echo esc_html( implode( ' · ', $parts ) );
+						echo esc_html( implode( ' - ', $parts ) );
 					?></td>
 					<td><?php echo esc_html( $r->updated_at ); ?></td>
 					<td><a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=mld-lich-override&mld_delete=' . $r->ngay ), 'mld_lich_override_delete' ) ); ?>" onclick="return confirm('Xóa ghi đè ngày này?');">Xóa</a></td>
@@ -1370,5 +1494,4 @@ function mld_lich_override_admin_page() {
 	</div>
 	<?php
 }
-
 
